@@ -186,6 +186,34 @@ TEST_CASE("Interval: cable down longer than delay produces a false event", "[Eve
   REQUIRE(sender.calls[0].value == false);
 }
 
+TEST_CASE("nextDeadline reflects the armed/disarmed state across OneShot and Interval", "[EventDescriptor]") {
+  FakeSender sender;
+  EventDescriptor<bool> oneShot(EventId::NtpAlive1,
+                                EventConfig{.mode = EventMode::OneShot, .delay = 5000ms, .interval = 1000ms}, sender,
+                                /*initial=*/false);
+
+  REQUIRE_FALSE(oneShot.nextDeadline().has_value());  // never triggered: no timer armed
+
+  oneShot.trigger(EventValue{true});
+  REQUIRE(oneShot.nextDeadline() == std::optional{5000ms});
+
+  oneShot.tick(5000ms);  // OneShot fires and disarms
+  REQUIRE_FALSE(oneShot.nextDeadline().has_value());
+
+  EventDescriptor<bool> interval(EventId::ChannelLifeEthernet0,
+                                 EventConfig{.mode = EventMode::Interval, .delay = 1000ms, .interval = 3000ms},
+                                 sender, /*initial=*/false);
+
+  interval.trigger(EventValue{true});
+  REQUIRE(interval.nextDeadline() == std::optional{1000ms});
+
+  interval.tick(1000ms);  // settles into Heartbeat, re-arms +interval
+  REQUIRE(interval.nextDeadline() == std::optional{4000ms});
+
+  interval.tick(4000ms);  // heartbeat fires again, still armed forever
+  REQUIRE(interval.nextDeadline() == std::optional{7000ms});
+}
+
 TEST_CASE("Metrics track triggered, raised, and suppressed counts", "[EventDescriptor][Metrics]") {
   FakeSender sender;
   EventDescriptor<bool> event(EventId::ChannelLifeEthernet0,

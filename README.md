@@ -33,7 +33,7 @@ graph TD
     Netlink -- "trigger(EventId, EventValue)" --> Supervisor
     NtpClient -- "trigger(EventId, EventValue)" --> Supervisor
     Supervisor -- "owns 1..32" --> Descriptor
-    Supervisor -. "worker thread: tick(now) every tickPeriod" .-> Descriptor
+    Supervisor -. "worker thread: tick(now), sleeps until earliest nextDeadline()" .-> Descriptor
     Descriptor -- "reads" --> Config
     Descriptor -- "updates" --> Metrics
     Descriptor -- "send(EventId, TValue)" --> Sender
@@ -157,10 +157,41 @@ Owns a fixed set of `EventDescriptor` instances and a dedicated thread:
    descriptor collection itself.
 2. **`emitInitialSnapshot()`** — sends the startup snapshot (see above).
 3. **`start()`** — spawns the worker thread, which calls `tick(now)` on every
-   descriptor at a fixed period (`tickPeriod`, default 100 ms, configurable via the constructor).
+   descriptor, then sleeps precisely until the earliest deadline any descriptor reports via
+   `nextDeadline()` — not a fixed period. `tickPeriod` (default 100 ms, configurable via the
+   constructor) is only used as an idle-poll fallback when no descriptor currently has an armed
+   deadline (e.g. before any `trigger()` has been received).
 4. **`trigger(EventId, EventValue)`** — callable from any external thread
-   (e.g. a netlink callback or NTP client) to report a raw state change.
+   (e.g. a netlink callback or NTP client) to report a raw state change; also wakes the worker thread
+   in case it just armed a deadline earlier than the one the worker is currently sleeping until.
 5. **`stop()`** — signals the worker thread to exit and joins it.
+
+### Adaptive Wake
+
+Rather than waking at a fixed cadence and checking every descriptor for no reason, the worker computes
+the minimum of all descriptors' `nextDeadline()` after each `tick()` pass and sleeps exactly until then:
+
+```mermaid
+sequenceDiagram
+    participant Worker as Worker Thread
+    participant Descs as Descriptors
+    participant Ext as External Thread
+
+    loop each wake
+        Worker->>Descs: tick(now) on every descriptor
+        Worker->>Descs: nextDeadline() on every descriptor
+        Note over Worker: sleepUntil = min(deadlines)\n(or tickPeriod if none armed)
+        Worker->>Worker: wait_until(sleepUntil)
+    end
+
+    Ext->>Descs: trigger(value)  (arms an earlier deadline)
+    Ext->>Worker: notify_one()
+    Note over Worker: wakes early, recomputes min deadline
+```
+
+This means a `OneShot` with a 50 ms delay fires within ~50 ms of its trigger rather than waiting for the
+next multiple of `tickPeriod`, while a quiescent supervisor with nothing armed yet only wakes every
+`tickPeriod` until the first `trigger()` arrives.
 
 ### Thread Safety
 
@@ -193,10 +224,7 @@ sequenceDiagram
     Note over Desc: pending_=false, Phase=Debounce\nre-arm delay timer
     deactivate Desc
 
-    loop every tickPeriod
-        Worker->>Desc: tick(now)
-        Note over Desc: now < ArmedAt: no-op
-    end
+    Note over Worker: sleeps exactly until ArmedAt\n(nextDeadline(), no polling in between)
 
     Worker->>Desc: tick(now)  (ArmedAt elapsed)
     activate Desc
@@ -204,9 +232,7 @@ sequenceDiagram
     Desc->>Desc: Phase=Heartbeat, arm +interval
     deactivate Desc
 
-    loop every tickPeriod until +interval elapses
-        Worker->>Desc: tick(now)
-    end
+    Note over Worker: sleeps exactly until +interval elapses\n(nextDeadline(), no polling in between)
 
     Worker->>Desc: tick(now)  (interval elapsed, no trigger since)
     activate Desc
@@ -240,7 +266,7 @@ payload type, extend the `EventValue` variant in `EventValue.hpp`.
 graph LR
     A["registerDescriptor()\n(repeated, one per event)"] --> B["emitInitialSnapshot()\n(bypasses delay/debounce,\nsends 'initial' for untouched events)"]
     B --> C["start()\n(spawns worker thread)"]
-    C --> D["Running:\ntrigger() from external threads\ntick() from worker thread, every tickPeriod"]
+    C --> D["Running:\ntrigger() from external threads\ntick() from worker thread, at each nextDeadline()"]
     D --> E["stop()\n(signals worker, joins thread)"]
 
     style A fill:#e8f0fe,stroke:#4285f4
@@ -271,7 +297,7 @@ class ConsoleSender final : public IEventSender<bool> {
 };
 
 ConsoleSender sender;
-EventSupervisor supervisor(100ms);  // tickPeriod, defaults to 100ms
+EventSupervisor supervisor(100ms);  // tickPeriod: idle-poll fallback only, defaults to 100ms
 
 supervisor.registerDescriptor(std::make_unique<EventDescriptor<bool>>(
     EventId::ChannelLifeEthernet0,
