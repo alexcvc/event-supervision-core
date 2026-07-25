@@ -3,6 +3,7 @@ Language:        Cpp
 BasedOnStyle: Google
 AllowShortBlocksOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Empty
 AllowShortLambdasOnASingleLine: Empty
 AllowShortLoopsOnASingleLine: false
 ColumnLimit: 120
@@ -18,11 +19,3 @@ IncludeCategories:
     Priority: 4
 NamespaceIndentation: Inner
 ReflowComments: false
-# Overrides below diverge from Google style to match this project's actual
-# convention (Allman braces, 4-space indent, aligned member declarations).
-IndentWidth: 4
-AccessModifierOffset: -4
-BreakBeforeBraces: Allman
-AlignConsecutiveDeclarations: true
-AllowShortFunctionsOnASingleLine: InlineOnly
-SpacesBeforeTrailingComments: 1

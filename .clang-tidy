@@ -62,56 +62,55 @@ WarningsAsErrors: >
 
 HeaderFilterRegex: '.*\.h{,h,pp}$'
 
-# Naming rules below codify this project's actual convention (verified
-# against include/app/event/*, examples/, tests/), not stock Google style:
-#   - types (class/struct/enum/enum constants/aliases): CamelCase
-#   - methods and free functions:                        CamelCase (e.g. Trigger(), EmitSnapshot())
-#   - private/protected data members:                     camelBack with trailing '_' (e.g. armedAt_)
-#   - local variables and parameters:                      camelBack
-#   - constants (constexpr/global/static):                 CamelCase, no 'k' prefix (e.g. MaxEvents)
-#   - macros:                                               UPPER_CASE
+# Google Style patterns. Based on https://gist.github.com/airglow923/1fa3bda42f2b193920d7f46ee8345e04
 CheckOptions:
   - key:             readability-identifier-naming.ClassCase
     value:           CamelCase
-  - key:             readability-identifier-naming.ClassMemberCase
+  - key:             readability-identifier-naming.ClassMemberCase     # original: lower_case
     value:           camelBack
   - key:             readability-identifier-naming.ConstexprVariableCase
     value:           CamelCase
+  - key:             readability-identifier-naming.ConstexprVariablePrefix
+    value:           k
   - key:             readability-identifier-naming.EnumCase
     value:           CamelCase
   - key:             readability-identifier-naming.EnumConstantCase
     value:           CamelCase
+  # - key:             readability-identifier-naming.EnumConstantPrefix
+  #   value:           k
   - key:             readability-identifier-naming.FunctionCase
-    value:           CamelCase
-  - key:             readability-identifier-naming.FunctionIgnoredRegexp   # lock()/unlock(): required lowercase by the BasicLockable concept (std::lock_guard)
-    value:           '^(lock|unlock|try_lock)$'
+    value:           camelBack
   - key:             readability-identifier-naming.GlobalConstantCase
     value:           CamelCase
+  - key:             readability-identifier-naming.GlobalConstantPrefix
+    value:           k
   - key:             readability-identifier-naming.StaticConstantCase
     value:           CamelCase
-  - key:             readability-identifier-naming.StaticVariableCase
+  - key:             readability-identifier-naming.StaticConstantPrefix
+    value:           k
+  - key:             readability-identifier-naming.StaticVariableCase   # original: lower_case
     value:           camelBack
   - key:             readability-identifier-naming.MacroDefinitionCase
     value:           UPPER_CASE
   - key:             readability-identifier-naming.MacroDefinitionIgnoredRegexp
     value:           '^[A-Z]+(_[A-Z]+)*_$'
-  - key:             readability-identifier-naming.MemberCase
-    value:           camelBack
-  - key:             readability-identifier-naming.PrivateMemberSuffix
-    value:           '_'
-  - key:             readability-identifier-naming.ProtectedMemberSuffix
-    value:           '_'
+  - key:             readability-identifier-naming.MemberCase           # original: lower_case
+    value:           CamelCase
+  - key:             readability-identifier-naming.MemberPrefix         # Added
+    value:           'm_'
+  #- key:             readability-identifier-naming.PrivateMemberSuffix # Disabled
+  #  value:           _
   - key:             readability-identifier-naming.PublicMemberSuffix
     value:           ''
-  - key:             readability-identifier-naming.NamespaceCase
+  - key:             readability-identifier-naming.NamespaceCase         # original: lower_case
     value:           camelBack
-  - key:             readability-identifier-naming.ParameterCase
+  - key:             readability-identifier-naming.ParameterCase         # original: lower_case
     value:           camelBack
   - key:             readability-identifier-naming.TypeAliasCase
     value:           CamelCase
   - key:             readability-identifier-naming.TypedefCase
     value:           CamelCase
-  - key:             readability-identifier-naming.VariableCase
+  - key:             readability-identifier-naming.VariableCase          # original: lower_case
     value:           camelBack
   - key:             readability-identifier-naming.IgnoreMainLikeFunctions
     value:           1
