@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <chrono>
@@ -7,6 +8,7 @@
 #include <cstddef>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -65,6 +67,9 @@ class EventSupervisor {
         break;
       }
     }
+    // Wake the worker in case this trigger armed a deadline earlier than the
+    // one it last computed and is currently sleeping until.
+    m_Cv.notify_one();
   }
 
   void start() {
@@ -88,18 +93,33 @@ class EventSupervisor {
 
  private:
   void run() {
-    auto next = std::chrono::steady_clock::now();
     while (m_Running.load(std::memory_order_acquire)) {
-      next += m_TickPeriod;
-
       const auto now =
           std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
       for (auto& d : m_Descriptors) {
         d->tick(now);
       }
 
+      // Sleep exactly until the earliest deadline any descriptor has armed,
+      // instead of waking at a fixed period regardless of need. Falls back
+      // to tickPeriod as an idle poll interval when nothing is armed yet
+      // (e.g. before any trigger() has been received).
+      std::optional<std::chrono::milliseconds> nextDeadline;
+      for (auto& d : m_Descriptors) {
+        if (const auto deadline = d->nextDeadline()) {
+          nextDeadline = nextDeadline ? std::min(*nextDeadline, *deadline) : *deadline;
+        }
+      }
+
+      const auto sleepFor = nextDeadline.has_value() ? (*nextDeadline - now) : m_TickPeriod;
+      const auto wakeAt = std::chrono::steady_clock::now() + sleepFor;
+
+      // trigger() may notify_one() concurrently right after nextDeadline is
+      // computed above but before wait_until() starts waiting; the narrow
+      // race is bounded (the loop still wakes at the stale wakeAt and
+      // recomputes correctly then), so it is not worth a coarser lock.
       std::unique_lock<std::mutex> lock(m_CvMutex);
-      m_Cv.wait_until(lock, next, [this] {
+      m_Cv.wait_until(lock, wakeAt, [this] {
         return !m_Running.load(std::memory_order_acquire);
       });
     }

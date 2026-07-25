@@ -128,6 +128,12 @@ class EventDescriptor final : public IEventDescriptor {
     return m_Id;
   }
 
+  /// @brief Returns the deadline at which this descriptor next needs a tick() call, if any.
+  [[nodiscard]] std::optional<std::chrono::milliseconds> nextDeadline() const noexcept override {
+    const std::scoped_lock<SpinLock> lock(m_Spin);
+    return m_ArmedAt;
+  }
+
   /// @brief Returns the last value that was actually sent to the receiver.
   [[nodiscard]] TValue image() const noexcept {
     const std::scoped_lock<SpinLock> lock(m_Spin);

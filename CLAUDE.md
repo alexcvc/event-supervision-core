@@ -37,9 +37,13 @@ ctest --test-dir build -R "<test name regex>"       # run a single test/section
 Three-layer design per event:
 
 1. **`EventSupervisor`** — owns a fixed vector (`MaxEvents = 32`) of `IEventDescriptor`s and one dedicated
-   worker thread that calls `Tick()` on every descriptor at a fixed `tickPeriod_`. `Register()` is only valid
-   before `Start()` (asserted, not thread-safe). `Trigger(EventId, EventValue)` is the thread-safe entry point
-   external code (e.g. a netlink callback or NTP client) uses to report a raw condition change from any thread.
+   worker thread that calls `Tick()` on every descriptor, then sleeps precisely until the earliest deadline any
+   descriptor reports via `NextDeadline()` — not a fixed `tickPeriod_` poll. `tickPeriod_` is only used as the
+   idle-poll fallback when no descriptor currently has an armed deadline. `Trigger()` wakes the worker
+   (`notify_one`) in case it just armed a deadline earlier than the one the worker is currently sleeping until.
+   `Register()` is only valid before `Start()` (asserted, not thread-safe). `Trigger(EventId, EventValue)` is the
+   thread-safe entry point external code (e.g. a netlink callback or NTP client) uses to report a raw condition
+   change from any thread.
 
 2. **`EventDescriptor<TValue>`** (implements `IEventDescriptor`) — owns all timing/debounce/heartbeat state for
    *one* event. It does not know its receiver and does not decide what a "true" condition means — that

@@ -117,6 +117,34 @@ TEST_CASE("EventSupervisor: Interval event heartbeats repeatedly without further
   REQUIRE(sender.count() >= 3);
 }
 
+TEST_CASE("EventSupervisor: adaptive wake reacts to a trigger well before the idle tickPeriod fallback",
+          "[EventSupervisor]") {
+  ThreadSafeSender sender;
+  // A long tickPeriod: if the worker only woke on this fixed cadence, a
+  // 30ms-delay OneShot triggered right after start() would take ~2s to be
+  // observed. Adaptive wake should instead react within tens of ms.
+  EventSupervisor supervisor(2000ms);
+
+  supervisor.registerDescriptor(std::make_unique<EventDescriptor<bool>>(
+      EventId::NtpAlive1, EventConfig{.mode = EventMode::OneShot, .delay = 30ms, .interval = 1000ms}, sender, false));
+
+  supervisor.start();
+  supervisor.trigger(EventId::NtpAlive1, EventValue{true});
+
+  // Poll briefly; if adaptive wake works, this resolves in well under the
+  // 2000ms tickPeriod fallback.
+  constexpr int kMaxPolls = 25;
+  bool received = false;
+  for (int i = 0; i < kMaxPolls && !received; ++i) {
+    std::this_thread::sleep_for(20ms);
+    received = sender.count() == 1;
+  }
+
+  supervisor.stop();
+
+  REQUIRE(received);
+}
+
 TEST_CASE("EventSupervisor: registerDescriptor returns false once kMaxEvents capacity is exceeded",
           "[EventSupervisor]") {
   ThreadSafeSender sender;
