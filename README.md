@@ -11,6 +11,39 @@ signals, and heartbeat-style resilience against controller restarts.
 
 ## Core Concepts
 
+### Component Overview
+
+```mermaid
+graph TD
+    subgraph External["External Threads"]
+        Netlink["Netlink callback\n(Ethernet link-up)"]
+        NtpClient["NTP client\n(time sync confirmed)"]
+    end
+
+    subgraph Core["event_system"]
+        Supervisor["EventSupervisor\n(owns worker thread + descriptors)"]
+        Descriptor["EventDescriptor&lt;TValue&gt;\n(debounce/heartbeat state machine)"]
+        Config["EventConfig\n(mode, delay, interval)"]
+        Metrics["EventMetrics\n(Triggered/Raised/Suppressed)"]
+    end
+
+    Sender["IEventSender&lt;TValue&gt;\n(caller-implemented)"]
+    Controller["Remote Controller ('Regler')"]
+
+    Netlink -- "trigger(EventId, EventValue)" --> Supervisor
+    NtpClient -- "trigger(EventId, EventValue)" --> Supervisor
+    Supervisor -- "owns 1..32" --> Descriptor
+    Supervisor -. "worker thread: tick(now) every tickPeriod" .-> Descriptor
+    Descriptor -- "reads" --> Config
+    Descriptor -- "updates" --> Metrics
+    Descriptor -- "send(EventId, TValue)" --> Sender
+    Sender --> Controller
+```
+
+`EventDescriptor` implements `IEventDescriptor` so `EventSupervisor` can hold
+a type-erased collection of them; `IEventSender<TValue>` keeps the descriptor
+receiver-agnostic (it only knows *that* it must send, not *where*).
+
 ### EventId
 Enum identifying a specific monitored condition (`ChannelLifeEthernet0..3`,
 `NtpAlive1`, `NtpAlive2`, ...). Values only, no payload.
@@ -46,6 +79,38 @@ raised (sent), or suppressed (debounced away). Exposed as atomics for
 Prometheus-style scraping.
 
 ## Timing Behavior
+
+### Descriptor State Machine
+
+The internal `Phase` (`Debounce` / `Heartbeat`) drives every timing decision.
+`trigger()` and `tick()` are the only two entry points that move it:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Debounce : constructed (initial value)
+
+    Debounce --> Debounce : trigger()\n(delay > 0: re-arm timer)
+    Debounce --> Debounce : tick() before ArmedAt elapses\n(no-op)
+    Debounce --> Heartbeat : tick() at ArmedAt, mode=Interval\n(fireIfChangedLocked, then arm +interval)
+    Debounce --> [*] : tick() at ArmedAt, mode=OneShot\n(fireIfChangedLocked, then disarm)
+
+    Heartbeat --> Heartbeat : tick() at ArmedAt\n(unconditional resend, re-arm +interval)
+    Heartbeat --> Debounce : trigger()\n(delay > 0: re-arm timer, even from Heartbeat)
+    Heartbeat --> Heartbeat : trigger()\n(delay == 0: send if changed, stay in Heartbeat)
+
+    note right of Debounce
+        fireIfChangedLocked():
+        pending_ != image_ -> send, Raised++
+        pending_ == image_ -> Suppressed++
+    end note
+```
+
+Two shapes fall out of this one machine:
+- **OneShot**: `Debounce -> [*]` — fires at most once per trigger cycle, then
+  goes idle (no heartbeat loop).
+- **Interval**: `Debounce <-> Heartbeat` forever — once the first debounce
+  settles, it heartbeats on every `interval` and can be knocked back into
+  `Debounce` by any later `trigger()` with `delay > 0`.
 
 ### Delay + Debounce (OneShot, and Interval with delay > 0)
 `trigger()` restarts the delay timer on every call. Only when the timer
@@ -106,6 +171,50 @@ Owns a fixed set of `EventDescriptor` instances and a dedicated thread:
   `trigger()` (external threads) and `tick()` (supervisor thread) can run
   concurrently.
 
+### Debounce + Heartbeat in Action
+
+Example: an Ethernet link that flaps once during the debounce window, then
+settles, followed by an unrelated heartbeat resend with no new trigger.
+
+```mermaid
+sequenceDiagram
+    participant Ext as External Thread\n(netlink callback)
+    participant Desc as EventDescriptor
+    participant Worker as Worker Thread
+    participant Sender as IEventSender
+
+    Ext->>Desc: trigger(true)
+    activate Desc
+    Note over Desc: pending_=true, Phase=Debounce\narm delay timer
+    deactivate Desc
+
+    Ext->>Desc: trigger(false)  (cable flap, within delay)
+    activate Desc
+    Note over Desc: pending_=false, Phase=Debounce\nre-arm delay timer
+    deactivate Desc
+
+    loop every tickPeriod
+        Worker->>Desc: tick(now)
+        Note over Desc: now < ArmedAt: no-op
+    end
+
+    Worker->>Desc: tick(now)  (ArmedAt elapsed)
+    activate Desc
+    Note over Desc: pending_(false) == image_(false)\n-> Suppressed++, nothing sent
+    Desc->>Desc: Phase=Heartbeat, arm +interval
+    deactivate Desc
+
+    loop every tickPeriod until +interval elapses
+        Worker->>Desc: tick(now)
+    end
+
+    Worker->>Desc: tick(now)  (interval elapsed, no trigger since)
+    activate Desc
+    Desc->>Sender: send(EventId, image_)  (unconditional heartbeat)
+    Note over Desc: Raised++, re-arm +interval
+    deactivate Desc
+```
+
 ## Ownership of Trigger Calls
 
 The event system does not decide *when* a condition is true — it only
@@ -124,6 +233,26 @@ accordingly:
 alternative throws/crashes (`std::bad_variant_access` via `std::get`). Callers
 must match the declared payload type for each `EventId`. To support a new
 payload type, extend the `EventValue` variant in `EventValue.hpp`.
+
+## Startup & Lifecycle Flow
+
+```mermaid
+graph LR
+    A["registerDescriptor()\n(repeated, one per event)"] --> B["emitInitialSnapshot()\n(bypasses delay/debounce,\nsends 'initial' for untouched events)"]
+    B --> C["start()\n(spawns worker thread)"]
+    C --> D["Running:\ntrigger() from external threads\ntick() from worker thread, every tickPeriod"]
+    D --> E["stop()\n(signals worker, joins thread)"]
+
+    style A fill:#e8f0fe,stroke:#4285f4
+    style B fill:#e8f0fe,stroke:#4285f4
+    style C fill:#e6f4ea,stroke:#34a853
+    style D fill:#e6f4ea,stroke:#34a853
+    style E fill:#fce8e6,stroke:#ea4335
+```
+
+`registerDescriptor()` and `emitInitialSnapshot()` are only valid before
+`start()` (enforced by `assert`) — this is what lets the supervisor iterate
+its descriptor collection without a lock once running.
 
 ## Example
 
