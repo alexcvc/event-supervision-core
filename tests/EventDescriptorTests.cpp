@@ -5,7 +5,12 @@
 
 #include "app/event/EventDescriptor.hpp"
 
-using namespace app::event;
+using app::event::EventConfig;
+using app::event::EventDescriptor;
+using app::event::EventId;
+using app::event::EventMode;
+using app::event::EventValue;
+using app::event::IEventSender;
 using namespace std::chrono_literals;
 
 namespace {
@@ -17,7 +22,7 @@ class FakeSender final : public IEventSender<bool> {
     bool value;
   };
 
-  void Send(EventId id, bool value) noexcept override {
+  void send(EventId id, bool value) noexcept override {
     calls.push_back({id, value});
   }
 
@@ -26,21 +31,23 @@ class FakeSender final : public IEventSender<bool> {
 
 }  // namespace
 
-TEST_CASE("Initial image is false and no send happens before first Tick", "[EventDescriptor]") {
+TEST_CASE("Initial image is false and no send happens before first tick", "[EventDescriptor]") {
   FakeSender sender;
-  EventDescriptor<bool> ev(EventId::ChannelLifeEthernet0, EventConfig{EventMode::OneShot, 5000ms, 1000ms}, sender,
-                           /*initial=*/false);
+  const EventDescriptor<bool> event(EventId::ChannelLifeEthernet0,
+                                    EventConfig{.mode = EventMode::OneShot, .delay = 5000ms, .interval = 1000ms},
+                                    sender, /*initial=*/false);
 
-  REQUIRE(ev.image() == false);
+  REQUIRE(event.image() == false);
   REQUIRE(sender.calls.empty());
 }
 
-TEST_CASE("EmitSnapshot sends current image immediately, bypassing delay", "[EventDescriptor]") {
+TEST_CASE("emitSnapshot sends current image immediately, bypassing delay", "[EventDescriptor]") {
   FakeSender sender;
-  EventDescriptor<bool> ev(EventId::NtpAlive1, EventConfig{EventMode::OneShot, 10000ms, 1000ms}, sender,
-                           /*initial=*/false);
+  EventDescriptor<bool> event(EventId::NtpAlive1,
+                              EventConfig{.mode = EventMode::OneShot, .delay = 10000ms, .interval = 1000ms}, sender,
+                              /*initial=*/false);
 
-  ev.EmitSnapshot();
+  event.emitSnapshot();
 
   REQUIRE(sender.calls.size() == 1);
   REQUIRE(sender.calls[0].id == EventId::NtpAlive1);
@@ -49,137 +56,146 @@ TEST_CASE("EmitSnapshot sends current image immediately, bypassing delay", "[Eve
 
 TEST_CASE("OneShot fires exactly once after delay elapses with no intervening trigger", "[EventDescriptor]") {
   FakeSender sender;
-  EventDescriptor<bool> ev(EventId::NtpAlive1, EventConfig{EventMode::OneShot, 10000ms, 1000ms}, sender,
-                           /*initial=*/false);
+  EventDescriptor<bool> event(EventId::NtpAlive1,
+                              EventConfig{.mode = EventMode::OneShot, .delay = 10000ms, .interval = 1000ms}, sender,
+                              /*initial=*/false);
 
-  ev.Trigger(EventValue{true});
+  event.trigger(EventValue{true});
 
-  ev.Tick(0ms);
+  event.tick(0ms);
   REQUIRE(sender.calls.empty());
 
-  ev.Tick(9999ms);
+  event.tick(9999ms);
   REQUIRE(sender.calls.empty());
 
-  ev.Tick(10000ms);
+  event.tick(10000ms);
   REQUIRE(sender.calls.size() == 1);
   REQUIRE(sender.calls[0].value == true);
 
   // Further ticks must not re-fire (OneShot).
-  ev.Tick(20000ms);
+  event.tick(20000ms);
   REQUIRE(sender.calls.size() == 1);
 }
 
 TEST_CASE("OneShot debounce: rapid flapping within delay window suppresses event if value returns to image",
           "[EventDescriptor]") {
   FakeSender sender;
-  EventDescriptor<bool> ev(EventId::ChannelLifeEthernet0, EventConfig{EventMode::OneShot, 10000ms, 1000ms}, sender,
-                           /*initial=*/true);
+  EventDescriptor<bool> event(EventId::ChannelLifeEthernet0,
+                              EventConfig{.mode = EventMode::OneShot, .delay = 10000ms, .interval = 1000ms}, sender,
+                              /*initial=*/true);
 
-  ev.Trigger(EventValue{false});  // armedAt = 0 + 10000ms
-  ev.Tick(2000ms);
+  event.trigger(EventValue{false});  // armedAt = 0 + 10000ms
+  event.tick(2000ms);
 
-  ev.Trigger(EventValue{true});  // rearm at 2000 + 10000 = 12000ms
-  ev.Tick(11000ms);
+  event.trigger(EventValue{true});  // rearm at 2000 + 10000 = 12000ms
+  event.tick(11000ms);
   REQUIRE(sender.calls.empty());
 
-  ev.Tick(12000ms);
+  event.tick(12000ms);
   // pending (true) == image (true) -> suppressed, no send.
   REQUIRE(sender.calls.empty());
 }
 
 TEST_CASE("OneShot debounce: change that persists past delay is sent", "[EventDescriptor]") {
   FakeSender sender;
-  EventDescriptor<bool> ev(EventId::ChannelLifeEthernet0, EventConfig{EventMode::OneShot, 10000ms, 1000ms}, sender,
-                           /*initial=*/true);
+  EventDescriptor<bool> event(EventId::ChannelLifeEthernet0,
+                              EventConfig{.mode = EventMode::OneShot, .delay = 10000ms, .interval = 1000ms}, sender,
+                              /*initial=*/true);
 
-  ev.Trigger(EventValue{false});
-  ev.Tick(9999ms);
+  event.trigger(EventValue{false});
+  event.tick(9999ms);
   REQUIRE(sender.calls.empty());
 
-  ev.Tick(10000ms);
+  event.tick(10000ms);
   REQUIRE(sender.calls.size() == 1);
   REQUIRE(sender.calls[0].value == false);
 }
 
-TEST_CASE("Interval with delay==0 fires immediately on Trigger if value changed", "[EventDescriptor]") {
+TEST_CASE("Interval with delay==0 fires immediately on trigger if value changed", "[EventDescriptor]") {
   FakeSender sender;
-  EventDescriptor<bool> ev(EventId::ChannelLifeEthernet1, EventConfig{EventMode::Interval, 0ms, 30000ms}, sender,
-                           /*initial=*/false);
+  EventDescriptor<bool> event(EventId::ChannelLifeEthernet1,
+                              EventConfig{.mode = EventMode::Interval, .delay = 0ms, .interval = 30000ms}, sender,
+                              /*initial=*/false);
 
-  ev.Trigger(EventValue{true});
+  event.trigger(EventValue{true});
 
   REQUIRE(sender.calls.size() == 1);
   REQUIRE(sender.calls[0].value == true);
 }
 
-TEST_CASE("Interval with delay==0 does not resend on Trigger if value unchanged", "[EventDescriptor]") {
+TEST_CASE("Interval with delay==0 does not resend on trigger if value unchanged", "[EventDescriptor]") {
   FakeSender sender;
-  EventDescriptor<bool> ev(EventId::ChannelLifeEthernet1, EventConfig{EventMode::Interval, 0ms, 30000ms}, sender,
-                           /*initial=*/false);
+  EventDescriptor<bool> event(EventId::ChannelLifeEthernet1,
+                              EventConfig{.mode = EventMode::Interval, .delay = 0ms, .interval = 30000ms}, sender,
+                              /*initial=*/false);
 
-  ev.Trigger(EventValue{false});  // same as initial
+  event.trigger(EventValue{false});  // same as initial
 
   REQUIRE(sender.calls.empty());
 }
 
-TEST_CASE("Interval sends heartbeat unconditionally on each period, even without new Trigger", "[EventDescriptor]") {
+TEST_CASE("Interval sends heartbeat unconditionally on each period, even without new trigger", "[EventDescriptor]") {
   FakeSender sender;
-  EventDescriptor<bool> ev(EventId::ChannelLifeEthernet0, EventConfig{EventMode::Interval, 10000ms, 30000ms}, sender,
-                           /*initial=*/false);
+  EventDescriptor<bool> event(EventId::ChannelLifeEthernet0,
+                              EventConfig{.mode = EventMode::Interval, .delay = 10000ms, .interval = 30000ms}, sender,
+                              /*initial=*/false);
 
-  ev.Trigger(EventValue{true});
-  ev.Tick(10000ms);
+  event.trigger(EventValue{true});
+  event.tick(10000ms);
   REQUIRE(sender.calls.size() == 1);
   REQUIRE(sender.calls[0].value == true);
 
-  // No new Trigger for a long time, but heartbeat must keep firing every Interval.
-  ev.Tick(40000ms);
+  // No new trigger for a long time, but heartbeat must keep firing every Interval.
+  event.tick(40000ms);
   REQUIRE(sender.calls.size() == 2);
   REQUIRE(sender.calls[1].value == true);  // same value, still resent (controller-reset protection)
 
-  ev.Tick(70000ms);
+  event.tick(70000ms);
   REQUIRE(sender.calls.size() == 3);
 }
 
 TEST_CASE("Interval: cable flap shorter than delay is absorbed, no event sent", "[EventDescriptor]") {
   FakeSender sender;
-  EventDescriptor<bool> ev(EventId::ChannelLifeEthernet2, EventConfig{EventMode::Interval, 10000ms, 30000ms}, sender,
-                           /*initial=*/true);
+  EventDescriptor<bool> event(EventId::ChannelLifeEthernet2,
+                              EventConfig{.mode = EventMode::Interval, .delay = 10000ms, .interval = 30000ms}, sender,
+                              /*initial=*/true);
 
-  ev.Trigger(EventValue{false});  // cable pulled
-  ev.Tick(2000ms);
+  event.trigger(EventValue{false});  // cable pulled
+  event.tick(2000ms);
 
-  ev.Trigger(EventValue{true});  // cable reinserted 2s later -> rearm at 2000+10000=12000
-  ev.Tick(11999ms);
+  event.trigger(EventValue{true});  // cable reinserted 2s later -> rearm at 2000+10000=12000
+  event.tick(11999ms);
   REQUIRE(sender.calls.empty());
 
-  ev.Tick(12000ms);
+  event.tick(12000ms);
   REQUIRE(sender.calls.empty());  // pending==image==true -> absorbed
 }
 
 TEST_CASE("Interval: cable down longer than delay produces a false event", "[EventDescriptor]") {
   FakeSender sender;
-  EventDescriptor<bool> ev(EventId::ChannelLifeEthernet3, EventConfig{EventMode::Interval, 10000ms, 30000ms}, sender,
-                           /*initial=*/true);
+  EventDescriptor<bool> event(EventId::ChannelLifeEthernet3,
+                              EventConfig{.mode = EventMode::Interval, .delay = 10000ms, .interval = 30000ms}, sender,
+                              /*initial=*/true);
 
-  ev.Trigger(EventValue{false});  // cable pulled, stays down
-  ev.Tick(9999ms);
+  event.trigger(EventValue{false});  // cable pulled, stays down
+  event.tick(9999ms);
   REQUIRE(sender.calls.empty());
 
-  ev.Tick(10000ms);
+  event.tick(10000ms);
   REQUIRE(sender.calls.size() == 1);
   REQUIRE(sender.calls[0].value == false);
 }
 
 TEST_CASE("Metrics track triggered, raised, and suppressed counts", "[EventDescriptor][Metrics]") {
   FakeSender sender;
-  EventDescriptor<bool> ev(EventId::ChannelLifeEthernet0, EventConfig{EventMode::OneShot, 1000ms, 1000ms}, sender,
-                           /*initial=*/true);
+  EventDescriptor<bool> event(EventId::ChannelLifeEthernet0,
+                              EventConfig{.mode = EventMode::OneShot, .delay = 1000ms, .interval = 1000ms}, sender,
+                              /*initial=*/true);
 
-  ev.Trigger(EventValue{false});  // triggered: 1
-  ev.Tick(1000ms);                // raised: 1 (value changed)
+  event.trigger(EventValue{false});  // triggered: 1
+  event.tick(1000ms);                // raised: 1 (value changed)
 
-  REQUIRE(ev.Metrics().Triggered() == 1);
-  REQUIRE(ev.Metrics().Raised() == 1);
-  REQUIRE(ev.Metrics().Suppressed() == 0);
+  REQUIRE(event.metrics().triggered() == 1);
+  REQUIRE(event.metrics().raised() == 1);
+  REQUIRE(event.metrics().suppressed() == 0);
 }

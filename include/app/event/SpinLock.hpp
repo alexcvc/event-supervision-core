@@ -9,17 +9,17 @@ namespace app::event {
 class SpinLock {
  public:
   void lock() noexcept {
-    while (flag_.test_and_set(std::memory_order_acquire)) {
+    while (m_Flag.test_and_set(std::memory_order_acquire)) {
       // busy-wait
     }
   }
 
   void unlock() noexcept {
-    flag_.clear(std::memory_order_release);
+    m_Flag.clear(std::memory_order_release);
   }
 
  private:
-  std::atomic_flag flag_ = ATOMIC_FLAG_INIT;
+  std::atomic_flag m_Flag = ATOMIC_FLAG_INIT;
 };
 
 }  // namespace app::event

@@ -19,7 +19,7 @@ namespace app::event {
 ///
 /// Does NOT know its receiver (that's IEventSender's job) and does NOT
 /// decide what "true" means for the underlying condition — callers of
-/// Trigger() own that decision.
+/// trigger() own that decision.
 ///
 /// @tparam TValue The payload type carried by this event (e.g. bool, int).
 template <typename TValue>
@@ -28,11 +28,11 @@ class EventDescriptor final : public IEventDescriptor {
   /// @brief Constructs an event descriptor bound to a fixed id, config, and sender.
   /// @param id      Identifier of the monitored event.
   /// @param config  Timing configuration (mode, delay, Interval).
-  /// @param sender  Non-owning reference to the object that will receive Send() calls.
+  /// @param sender  Non-owning reference to the object that will receive send() calls.
   ///                Must outlive this EventDescriptor.
   /// @param initial Initial value used as both the current image and pending value.
-  EventDescriptor(EventId id, EventConfig config, IEventSender<TValue>& sender, TValue initial) noexcept
-      : m_id_(id), config_(config), sender_(&sender), image_(initial), pending_(initial) {}
+  EventDescriptor(EventId id, const EventConfig& config, IEventSender<TValue>& sender, TValue initial) noexcept
+      : m_Id(id), m_Config(config), m_Sender(&sender), m_Image(initial), m_Pending(initial) {}
 
   /// @brief Reports a raw change in the underlying condition.
   ///
@@ -47,25 +47,25 @@ class EventDescriptor final : public IEventDescriptor {
   ///   descriptor was already in the Heartbeat phase.
   ///
   /// @param value New raw value, type-erased; must hold a `TValue` alternative.
-  void Trigger(EventValue value) noexcept override {
-    const std::scoped_lock<SpinLock> lock(spin_);
-    pending_ = std::get<TValue>(value);
-    metrics_.RecordTrigger();
+  void trigger(EventValue value) noexcept override {
+    const std::scoped_lock<SpinLock> lock(m_Spin);
+    m_Pending = std::get<TValue>(value);
+    m_Metrics.recordTrigger();
 
-    const bool immediate = config_.mode == EventMode::Interval && config_.delay == std::chrono::milliseconds{0};
+    const bool immediate = m_Config.mode == EventMode::Interval && m_Config.delay == std::chrono::milliseconds{0};
 
     if (immediate) {
-      FireIfChangedLocked();
-      armedAt_ = lastNow_ + config_.interval;
-      phase_ = Phase::Heartbeat;
+      fireIfChangedLocked();
+      m_ArmedAt = m_LastNow + m_Config.interval;
+      m_Phase = Phase::Heartbeat;
       return;
     }
 
     // delay > 0 (OneShot or Interval): every real trigger re-enters the
     // debounce phase and (re)arms the delay timer, even if we were
     // already in the Heartbeat phase.
-    armedAt_ = lastNow_ + config_.delay;
-    phase_ = Phase::Debounce;
+    m_ArmedAt = m_LastNow + m_Config.delay;
+    m_Phase = Phase::Debounce;
   }
 
   /// @brief Advances the descriptor's internal clock and fires timers as needed.
@@ -82,33 +82,33 @@ class EventDescriptor final : public IEventDescriptor {
   ///   Heartbeat (Interval mode) or disarms the timer (OneShot mode).
   ///
   /// @param now Current time, expressed as milliseconds since an external epoch.
-  void Tick(std::chrono::milliseconds now) noexcept override {
-    const std::scoped_lock<SpinLock> lock(spin_);
-    lastNow_ = now;
+  void tick(std::chrono::milliseconds now) noexcept override {
+    const std::scoped_lock<SpinLock> lock(m_Spin);
+    m_LastNow = now;
 
-    if (!armedAt_.has_value() || now < *armedAt_) {
+    if (!m_ArmedAt.has_value() || now < *m_ArmedAt) {
       return;
     }
 
-    if (config_.mode == EventMode::Interval && phase_ == Phase::Heartbeat) {
+    if (m_Config.mode == EventMode::Interval && m_Phase == Phase::Heartbeat) {
       // Heartbeat: unconditional resend of the current image.
       // Protects the remote controller against losing state on its
       // own reset — it will get the current value again within one
       // Interval, without needing a new physical trigger.
-      sender_->Send(m_id_, image_);
-      metrics_.RecordRaised();
-      armedAt_ = now + config_.interval;
+      m_Sender->send(m_Id, m_Image);
+      m_Metrics.recordRaised();
+      m_ArmedAt = now + m_Config.interval;
     } else {
       // Debounce phase (or OneShot): only send if the value actually
       // changed since the last sent image. This is what absorbs short
       // flapping that resolves back to the prior state within delay.
-      FireIfChangedLocked();
+      fireIfChangedLocked();
 
-      if (config_.mode == EventMode::Interval) {
-        armedAt_ = now + config_.interval;
-        phase_ = Phase::Heartbeat;
+      if (m_Config.mode == EventMode::Interval) {
+        m_ArmedAt = now + m_Config.interval;
+        m_Phase = Phase::Heartbeat;
       } else {
-        armedAt_.reset();
+        m_ArmedAt.reset();
       }
     }
   }
@@ -117,26 +117,26 @@ class EventDescriptor final : public IEventDescriptor {
   ///
   /// Intended for emitting an initial snapshot of state before normal
   /// triggering begins. Thread-safe: guarded internally by a spin lock.
-  void EmitSnapshot() noexcept override {
-    const std::scoped_lock<SpinLock> lock(spin_);
-    sender_->Send(m_id_, image_);
-    metrics_.RecordRaised();
+  void emitSnapshot() noexcept override {
+    const std::scoped_lock<SpinLock> lock(m_Spin);
+    m_Sender->send(m_Id, m_Image);
+    m_Metrics.recordRaised();
   }
 
   /// @brief Returns the identifier of the monitored event.
-  [[nodiscard]] EventId Id() const noexcept override {
-    return m_id_;
+  [[nodiscard]] EventId id() const noexcept override {
+    return m_Id;
   }
 
   /// @brief Returns the last value that was actually sent to the receiver.
   [[nodiscard]] TValue image() const noexcept {
-    const std::scoped_lock<SpinLock> lock(spin_);
-    return image_;
+    const std::scoped_lock<SpinLock> lock(m_Spin);
+    return m_Image;
   }
 
   /// @brief Returns the metrics counters (triggered/raised/suppressed) for this descriptor.
-  [[nodiscard]] const EventMetrics& Metrics() const noexcept {
-    return metrics_;
+  [[nodiscard]] const EventMetrics& metrics() const noexcept {
+    return m_Metrics;
   }
 
  private:
@@ -149,29 +149,29 @@ class EventDescriptor final : public IEventDescriptor {
 
   /// @brief Sends the pending value if it differs from the current image.
   ///
-  /// On change: updates `image_` to `pending_`, sends it, and records a
+  /// On change: updates `m_Image` to `m_Pending`, sends it, and records a
   /// "raised" metric. On no change: records a "suppressed" metric instead.
-  /// Must be called while `spin_` is held.
-  void FireIfChangedLocked() noexcept {
-    if (pending_ != image_) {
-      image_ = pending_;
-      sender_->Send(m_id_, image_);
-      metrics_.RecordRaised();
+  /// Must be called while `m_Spin` is held.
+  void fireIfChangedLocked() noexcept {
+    if (m_Pending != m_Image) {
+      m_Image = m_Pending;
+      m_Sender->send(m_Id, m_Image);
+      m_Metrics.recordRaised();
     } else {
-      metrics_.RecordSuppressed();
+      m_Metrics.recordSuppressed();
     }
   }
 
-  EventId m_id_;                                       ///< Identifier of the monitored event.
-  EventConfig config_;                                ///< Timing configuration (mode, delay, Interval).
-  IEventSender<TValue>* sender_;                      ///< Non-owning pointer to the event receiver.
-  TValue image_;                                      ///< Last value actually sent to the receiver.
-  TValue pending_;                                    ///< Latest raw value reported via Trigger().
-  std::optional<std::chrono::milliseconds> armedAt_;  ///< Deadline at which the next timer action fires, if armed.
-  std::chrono::milliseconds lastNow_{0};              ///< Most recent time seen via Tick().
-  EventMetrics metrics_;                              ///< Triggered/raised/suppressed counters.
-  mutable SpinLock spin_;                             ///< Guards all mutable state above.
-  Phase phase_{Phase::Debounce};                      ///< Current timing phase (Debounce or Heartbeat).
+  EventId m_Id;                                        ///< Identifier of the monitored event.
+  EventConfig m_Config;                                ///< Timing configuration (mode, delay, Interval).
+  IEventSender<TValue>* m_Sender;                      ///< Non-owning pointer to the event receiver.
+  TValue m_Image;                                      ///< Last value actually sent to the receiver.
+  TValue m_Pending;                                    ///< Latest raw value reported via trigger().
+  std::optional<std::chrono::milliseconds> m_ArmedAt;  ///< Deadline at which the next timer action fires, if armed.
+  std::chrono::milliseconds m_LastNow{0};              ///< Most recent time seen via tick().
+  EventMetrics m_Metrics;                              ///< Triggered/raised/suppressed counters.
+  mutable SpinLock m_Spin;                             ///< Guards all mutable state above.
+  Phase m_Phase{Phase::Debounce};                      ///< Current timing phase (Debounce or Heartbeat).
 };
 
 }  // namespace app::event

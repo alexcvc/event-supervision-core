@@ -26,6 +26,12 @@
 #      and reduces readability.
 #
 #  -readability-uppercase-literal-suffix: Superfluous nitpicking.
+#
+#  -llvm-header-guard: This project uses `#pragma once` everywhere by design;
+#      it is never replaced by `#ifndef` include guards.
+#
+#  -bugprone-chained-comparison: False positive inside Catch2's REQUIRE/CHECK
+#      macro expansion (Catch::Decomposer() <= ...), not in project code.
 
 Checks: >
   *,
@@ -44,6 +50,8 @@ Checks: >
   -misc-no-recursion,
   -modernize-use-trailing-return-type,
   -readability-uppercase-literal-suffix,
+  -llvm-header-guard,
+  -bugprone-chained-comparison,
 
 # Turn all the warnings from the checks above into errors.
 WarningsAsErrors: >
@@ -80,6 +88,8 @@ CheckOptions:
   #   value:           k
   - key:             readability-identifier-naming.FunctionCase
     value:           camelBack
+  - key:             readability-identifier-naming.FunctionIgnoredRegexp   # lock()/unlock(): required lowercase by the BasicLockable concept (std::lock_guard/scoped_lock)
+    value:           '^(lock|unlock|try_lock)$'
   - key:             readability-identifier-naming.GlobalConstantCase
     value:           CamelCase
   - key:             readability-identifier-naming.GlobalConstantPrefix
