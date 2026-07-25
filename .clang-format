@@ -1,0 +1,28 @@
+---
+Language:        Cpp
+BasedOnStyle: Google
+AllowShortBlocksOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Empty
+AllowShortLoopsOnASingleLine: false
+ColumnLimit: 120
+DerivePointerAlignment: false
+IncludeCategories:
+  - Regex: '\/.*(\.h|\.hpp)>'
+    Priority: 3
+  - Regex: '\.h>'
+    Priority: 1
+  - Regex: '^<.*'
+    Priority: 2
+  - Regex: '"'
+    Priority: 4
+NamespaceIndentation: Inner
+ReflowComments: false
+# Overrides below diverge from Google style to match this project's actual
+# convention (Allman braces, 4-space indent, aligned member declarations).
+IndentWidth: 4
+AccessModifierOffset: -4
+BreakBeforeBraces: Allman
+AlignConsecutiveDeclarations: true
+AllowShortFunctionsOnASingleLine: InlineOnly
+SpacesBeforeTrailingComments: 1

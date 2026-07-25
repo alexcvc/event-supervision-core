@@ -1,0 +1,2 @@
+add_executable(event_system_demo main.cpp)
+target_link_libraries(event_system_demo PRIVATE event_system)
