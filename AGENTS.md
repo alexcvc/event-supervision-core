@@ -2,7 +2,7 @@
 
 ## Project overview
 
-C++20 **header-only** library. All logic lives in `include/tickguard/`. Namespace: `tickguard` throughout. CMake exposes an `INTERFACE` target named `event_system`; consumers `target_link_libraries(... event_system)`.
+C++20 **header-only** library. All logic lives in `include/event/`. Namespace: `app::event` throughout. CMake exposes an `INTERFACE` target named `event_system`; consumers `target_link_libraries(... event_system)`.
 
 ## Key components
 

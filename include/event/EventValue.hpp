@@ -4,7 +4,7 @@
 #include <string>
 #include <variant>
 
-namespace tickguard {
+namespace app::event {
 
 /**
  * @brief Type-erased payload used to report and carry event values.
@@ -23,4 +23,4 @@ namespace tickguard {
  */
 using EventValue = std::variant<bool, std::int32_t, double, std::string>;
 
-}  // namespace tickguard
+}  // namespace app::event

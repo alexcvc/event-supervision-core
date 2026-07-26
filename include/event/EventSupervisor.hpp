@@ -13,11 +13,11 @@
 #include <utility>
 #include <vector>
 
-#include "tickguard/EventId.hpp"
-#include "tickguard/EventValue.hpp"
-#include "tickguard/IEventDescriptor.hpp"
+#include "event/EventId.hpp"
+#include "event/EventValue.hpp"
+#include "event/IEventDescriptor.hpp"
 
-namespace tickguard {
+namespace app::event {
 
 /**
  * @brief Owns a fixed set of `IEventDescriptor`s and one dedicated worker
@@ -240,4 +240,4 @@ class EventSupervisor {
   std::thread m_Worker;
 };
 
-}  // namespace tickguard
+}  // namespace app::event

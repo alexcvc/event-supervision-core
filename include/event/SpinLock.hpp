@@ -2,7 +2,7 @@
 
 #include <atomic>
 
-namespace tickguard {
+namespace app::event {
 
 /**
  * @brief Minimal spinlock built on `std::atomic_flag` for guarding short
@@ -56,4 +56,4 @@ class SpinLock {
   std::atomic_flag m_Flag = ATOMIC_FLAG_INIT;
 };
 
-}  // namespace tickguard
+}  // namespace app::event

@@ -4,14 +4,14 @@
 
 #include <catch2/catch.hpp>
 
-#include "tickguard/EventDescriptor.hpp"
+#include "event/EventDescriptor.hpp"
 
-using tickguard::EventConfig;
-using tickguard::EventDescriptor;
-using tickguard::EventId;
-using tickguard::EventMode;
-using tickguard::EventValue;
-using tickguard::IEventSender;
+using app::event::EventConfig;
+using app::event::EventDescriptor;
+using app::event::EventId;
+using app::event::EventMode;
+using app::event::EventValue;
+using app::event::IEventSender;
 using namespace std::chrono_literals;
 
 namespace {

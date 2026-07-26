@@ -1,8 +1,8 @@
 #pragma once
 
-#include "tickguard/EventId.hpp"
+#include "event/EventId.hpp"
 
-namespace tickguard {
+namespace app::event {
 
 /**
  * @brief Transport-facing interface for delivering event notifications.
@@ -55,4 +55,4 @@ class IEventSender {
   virtual void send(EventId id, TValue value) noexcept = 0;
 };
 
-}  // namespace tickguard
+}  // namespace app::event

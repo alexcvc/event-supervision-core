@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A small, header-only C++20 library (`event_system`) for supervising discrete state/condition events (e.g.
 Ethernet link-up, NTP sync) and reporting them to a remote controller with debounce and heartbeat semantics. No
-`.cpp` files in the library itself — everything lives under `include/tickguard/*.hpp`.
+`.cpp` files in the library itself — everything lives under `include/event/*.hpp`.
 
 ## Build & test
 
@@ -63,7 +63,7 @@ Three-layer design per event:
    TValue)`.
 
 Supporting types:
-- `EventId` (`include/tickguard/EventId.hpp`) — enum of all known monitored conditions; `Count` is a sizing
+- `EventId` (`include/event/EventId.hpp`) — enum of all known monitored conditions; `Count` is a sizing
   marker, not a real event.
 - `EventValue` — `std::variant<bool, std::int32_t>`; extend this variant (and corresponding
   `EventDescriptor<TValue>` instantiations) to support new payload types.

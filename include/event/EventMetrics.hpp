@@ -3,7 +3,7 @@
 #include <atomic>
 #include <cstdint>
 
-namespace tickguard {
+namespace app::event {
 
 /**
  * @brief Lock-free, Prometheus-friendly counters tracking one
@@ -86,4 +86,4 @@ class EventMetrics {
   std::atomic<std::uint32_t> m_Suppressed{0};
 };
 
-}  // namespace tickguard
+}  // namespace app::event

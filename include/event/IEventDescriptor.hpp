@@ -3,10 +3,10 @@
 #include <chrono>
 #include <optional>
 
-#include "tickguard/EventId.hpp"
-#include "tickguard/EventValue.hpp"
+#include "event/EventId.hpp"
+#include "event/EventValue.hpp"
 
-namespace tickguard {
+namespace app::event {
 
 /**
  * @brief Non-template interface for a single supervised event's timing
@@ -92,4 +92,4 @@ class IEventDescriptor {
   [[nodiscard]] virtual std::optional<std::chrono::milliseconds> nextDeadline() const noexcept = 0;
 };
 
-}  // namespace tickguard
+}  // namespace app::event

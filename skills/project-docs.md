@@ -38,7 +38,7 @@ change — only when the project's overall purpose or quick-start steps change.
 Before finishing any change that touches a Markdown doc, verify every link
 in the file(s) you edited:
 
-- **Links to code** (`include/tickguard/...`, `tests/...`, `examples/...`,
+- **Links to code** (`include/event/...`, `tests/...`, `examples/...`,
   specific symbols/anchors) must point at a path and, where a line/symbol is
   referenced, a target that still exists after your change. If you renamed
   or moved a file/symbol, grep the docs for the old path and update every

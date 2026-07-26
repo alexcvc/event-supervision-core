@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace tickguard {
+namespace app::event {
 
 /**
  * @brief Enumerates all monitored conditions supervised by
@@ -33,4 +33,4 @@ enum class EventId : std::uint8_t {
   Count
 };
 
-}  // namespace tickguard
+}  // namespace app::event

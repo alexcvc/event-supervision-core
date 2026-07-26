@@ -1,7 +1,7 @@
 #include <chrono>
 #include <string>
 
-#include "tickguard/EventDescriptor.hpp"
+#include "event/EventDescriptor.hpp"
 
 using namespace std::chrono_literals;
 
@@ -10,18 +10,18 @@ using namespace std::chrono_literals;
 // contract (see EventValue.hpp). Registered as a CTest death test in
 // tests/CMakeLists.txt, which passes based on the crash message it prints.
 int main() {
-  class NullSender final : public tickguard::IEventSender<bool> {
+  class NullSender final : public app::event::IEventSender<bool> {
    public:
-    void send(tickguard::EventId, bool) noexcept override {}
+    void send(app::event::EventId, bool) noexcept override {}
   };
 
   NullSender sender;
-  tickguard::EventDescriptor<bool> event(
-      tickguard::EventId::NtpAlive1,
-      tickguard::EventConfig{.mode = tickguard::EventMode::OneShot, .delay = 1000ms, .interval = 1000ms}, sender,
+  app::event::EventDescriptor<bool> event(
+      app::event::EventId::NtpAlive1,
+      app::event::EventConfig{.mode = app::event::EventMode::OneShot, .delay = 1000ms, .interval = 1000ms}, sender,
       /*initial=*/false);
 
-  event.trigger(tickguard::EventValue{std::string{"mismatched"}});
+  event.trigger(app::event::EventValue{std::string{"mismatched"}});
 
   return 0;  // Unreachable if the crash contract holds.
 }

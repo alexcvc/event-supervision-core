@@ -1,6 +1,6 @@
 # TickGuard Developer Guide
 
-Namespace: `tickguard`
+Namespace: `app::event`
 Language: C++20, embedded target (no dynamic threading frameworks, minimal heap use)
 
 ## Purpose
@@ -283,10 +283,10 @@ its descriptor collection without a lock once running.
 ## Example
 
 ```cpp
-#include "tickguard/EventDescriptor.hpp"
-#include "tickguard/EventSupervisor.hpp"
+#include "event/EventDescriptor.hpp"
+#include "event/EventSupervisor.hpp"
 
-using namespace tickguard;
+using namespace app::event;
 using namespace std::chrono_literals;
 
 class ConsoleSender final : public IEventSender<bool> {

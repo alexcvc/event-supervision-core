@@ -6,15 +6,15 @@
 #include <optional>
 #include <variant>
 
-#include "tickguard/EventConfig.hpp"
-#include "tickguard/EventId.hpp"
-#include "tickguard/EventMetrics.hpp"
-#include "tickguard/EventValue.hpp"
-#include "tickguard/IEventDescriptor.hpp"
-#include "tickguard/IEventSender.hpp"
-#include "tickguard/SpinLock.hpp"
+#include "event/EventConfig.hpp"
+#include "event/EventId.hpp"
+#include "event/EventMetrics.hpp"
+#include "event/EventValue.hpp"
+#include "event/IEventDescriptor.hpp"
+#include "event/IEventSender.hpp"
+#include "event/SpinLock.hpp"
 
-namespace tickguard {
+namespace app::event {
 
 /// @brief Owns timing/debounce logic for a single monitored condition.
 ///
@@ -185,4 +185,4 @@ class EventDescriptor final : public IEventDescriptor {
   Phase m_Phase{Phase::Debounce};                      ///< Current timing phase (Debounce or Heartbeat).
 };
 
-}  // namespace tickguard
+}  // namespace app::event
