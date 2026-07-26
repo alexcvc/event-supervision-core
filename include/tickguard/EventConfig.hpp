@@ -3,7 +3,7 @@
 #include <chrono>
 #include <cstdint>
 
-namespace app::event {
+namespace tickguard {
 
 /// @brief Defines how an event is reported once triggered.
 enum class EventMode : std::uint8_t {
@@ -27,4 +27,4 @@ struct EventConfig {
   std::chrono::milliseconds interval{kInterval};
 };
 
-}  // namespace app::event
+}  // namespace tickguard

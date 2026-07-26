@@ -3,16 +3,16 @@
 #include <memory>
 #include <thread>
 
-#include "app/event/EventDescriptor.hpp"
-#include "app/event/EventSupervisor.hpp"
+#include "tickguard/EventDescriptor.hpp"
+#include "tickguard/EventSupervisor.hpp"
 
-using app::event::EventConfig;
-using app::event::EventDescriptor;
-using app::event::EventId;
-using app::event::EventMode;
-using app::event::EventSupervisor;
-using app::event::EventValue;
-using app::event::IEventSender;
+using tickguard::EventConfig;
+using tickguard::EventDescriptor;
+using tickguard::EventId;
+using tickguard::EventMode;
+using tickguard::EventSupervisor;
+using tickguard::EventValue;
+using tickguard::IEventSender;
 using namespace std::chrono_literals;
 
 namespace {
