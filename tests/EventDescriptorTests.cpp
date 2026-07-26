@@ -1,4 +1,5 @@
 #define CATCH_CONFIG_MAIN
+#include <string>
 #include <vector>
 
 #include <catch2/catch.hpp>
@@ -23,6 +24,34 @@ class FakeSender final : public IEventSender<bool> {
   };
 
   void send(EventId id, bool value) noexcept override {
+    calls.push_back({id, value});
+  }
+
+  std::vector<Call> calls;
+};
+
+class FakeStringSender final : public IEventSender<std::string> {
+ public:
+  struct Call {
+    EventId id;
+    std::string value;
+  };
+
+  void send(EventId id, std::string value) noexcept override {
+    calls.push_back({id, std::move(value)});
+  }
+
+  std::vector<Call> calls;
+};
+
+class FakeDoubleSender final : public IEventSender<double> {
+ public:
+  struct Call {
+    EventId id;
+    double value;
+  };
+
+  void send(EventId id, double value) noexcept override {
     calls.push_back({id, value});
   }
 
@@ -226,4 +255,144 @@ TEST_CASE("Metrics track triggered, raised, and suppressed counts", "[EventDescr
   REQUIRE(event.metrics().triggered() == 1);
   REQUIRE(event.metrics().raised() == 1);
   REQUIRE(event.metrics().suppressed() == 0);
+}
+
+TEST_CASE("String payload: initial image is stored and emitSnapshot sends it verbatim", "[EventDescriptor][String]") {
+  FakeStringSender sender;
+  EventDescriptor<std::string> event(EventId::NtpAlive1,
+                                     EventConfig{.mode = EventMode::OneShot, .delay = 5000ms, .interval = 1000ms},
+                                     sender, /*initial=*/"unknown");
+
+  REQUIRE(event.image() == "unknown");
+
+  event.emitSnapshot();
+
+  REQUIRE(sender.calls.size() == 1);
+  REQUIRE(sender.calls[0].id == EventId::NtpAlive1);
+  REQUIRE(sender.calls[0].value == "unknown");
+}
+
+TEST_CASE("String payload: OneShot debounce sends a persisted change, suppresses a flap back to the original",
+          "[EventDescriptor][String]") {
+  FakeStringSender sender;
+  EventDescriptor<std::string> changed(EventId::NtpAlive1,
+                                       EventConfig{.mode = EventMode::OneShot, .delay = 10000ms, .interval = 1000ms},
+                                       sender, /*initial=*/"v1.2.0");
+
+  changed.trigger(EventValue{std::string{"v1.2.1"}});
+  changed.tick(10000ms);
+
+  REQUIRE(sender.calls.size() == 1);
+  REQUIRE(sender.calls[0].value == "v1.2.1");
+
+  FakeStringSender flapSender;
+  EventDescriptor<std::string> flapped(EventId::NtpAlive1,
+                                       EventConfig{.mode = EventMode::OneShot, .delay = 10000ms, .interval = 1000ms},
+                                       flapSender, /*initial=*/"v1.2.0");
+
+  flapped.trigger(EventValue{std::string{"v1.2.1"}});
+  flapped.tick(2000ms);
+  flapped.trigger(EventValue{std::string{"v1.2.0"}});  // reverts to image before delay elapses
+  flapped.tick(12000ms);
+
+  REQUIRE(flapSender.calls.empty());
+}
+
+TEST_CASE("String payload: Interval heartbeat resends the same string unconditionally", "[EventDescriptor][String]") {
+  FakeStringSender sender;
+  EventDescriptor<std::string> event(EventId::ChannelLifeEthernet0,
+                                     EventConfig{.mode = EventMode::Interval, .delay = 10000ms, .interval = 30000ms},
+                                     sender, /*initial=*/"unknown");
+
+  event.trigger(EventValue{std::string{"host-01"}});
+  event.tick(10000ms);
+  REQUIRE(sender.calls.size() == 1);
+  REQUIRE(sender.calls[0].value == "host-01");
+
+  event.tick(40000ms);  // no new trigger, heartbeat must still resend
+  REQUIRE(sender.calls.size() == 2);
+  REQUIRE(sender.calls[1].value == "host-01");
+}
+
+TEST_CASE("String payload: suppression is driven by content equality, not size", "[EventDescriptor][String]") {
+  FakeStringSender sender;
+  EventDescriptor<std::string> event(EventId::ChannelLifeEthernet0,
+                                     EventConfig{.mode = EventMode::OneShot, .delay = 5000ms, .interval = 1000ms},
+                                     sender, /*initial=*/"host-1");
+
+  event.trigger(EventValue{std::string{"host-01"}});  // same length class, different content -> must send
+  event.tick(5000ms);
+
+  REQUIRE(sender.calls.size() == 1);
+  REQUIRE(sender.calls[0].value == "host-01");
+}
+
+TEST_CASE("Double payload: initial image is stored and emitSnapshot sends it verbatim", "[EventDescriptor][Double]") {
+  FakeDoubleSender sender;
+  EventDescriptor<double> event(EventId::NtpAlive1,
+                                EventConfig{.mode = EventMode::OneShot, .delay = 5000ms, .interval = 1000ms}, sender,
+                                /*initial=*/0.0);
+
+  REQUIRE(event.image() == 0.0);
+
+  event.emitSnapshot();
+
+  REQUIRE(sender.calls.size() == 1);
+  REQUIRE(sender.calls[0].id == EventId::NtpAlive1);
+  REQUIRE(sender.calls[0].value == 0.0);
+}
+
+TEST_CASE("Double payload: OneShot debounce sends a persisted change, suppresses a flap back to the original",
+          "[EventDescriptor][Double]") {
+  FakeDoubleSender sender;
+  EventDescriptor<double> changed(EventId::NtpAlive1,
+                                  EventConfig{.mode = EventMode::OneShot, .delay = 10000ms, .interval = 1000ms}, sender,
+                                  /*initial=*/21.5);
+
+  changed.trigger(EventValue{22.0});
+  changed.tick(10000ms);
+
+  REQUIRE(sender.calls.size() == 1);
+  REQUIRE(sender.calls[0].value == 22.0);
+
+  FakeDoubleSender flapSender;
+  EventDescriptor<double> flapped(EventId::NtpAlive1,
+                                  EventConfig{.mode = EventMode::OneShot, .delay = 10000ms, .interval = 1000ms},
+                                  flapSender, /*initial=*/21.5);
+
+  flapped.trigger(EventValue{22.0});
+  flapped.tick(2000ms);
+  flapped.trigger(EventValue{21.5});  // reverts to image before delay elapses
+  flapped.tick(12000ms);
+
+  REQUIRE(flapSender.calls.empty());
+}
+
+TEST_CASE("Double payload: Interval heartbeat resends the same value unconditionally", "[EventDescriptor][Double]") {
+  FakeDoubleSender sender;
+  EventDescriptor<double> event(EventId::ChannelLifeEthernet0,
+                                EventConfig{.mode = EventMode::Interval, .delay = 10000ms, .interval = 30000ms}, sender,
+                                /*initial=*/0.0);
+
+  event.trigger(EventValue{36.6});
+  event.tick(10000ms);
+  REQUIRE(sender.calls.size() == 1);
+  REQUIRE(sender.calls[0].value == 36.6);
+
+  event.tick(40000ms);  // no new trigger, heartbeat must still resend
+  REQUIRE(sender.calls.size() == 2);
+  REQUIRE(sender.calls[1].value == 36.6);
+}
+
+TEST_CASE("Double payload: suppression is driven by exact equality", "[EventDescriptor][Double]") {
+  FakeDoubleSender sender;
+  EventDescriptor<double> event(EventId::ChannelLifeEthernet0,
+                                EventConfig{.mode = EventMode::OneShot, .delay = 5000ms, .interval = 1000ms}, sender,
+                                /*initial=*/1.0);
+
+  event.trigger(EventValue{1.1});  // close but distinct -> must send
+  event.tick(5000ms);
+
+  REQUIRE(sender.calls.size() == 1);
+  REQUIRE(sender.calls[0].value == 1.1);
 }

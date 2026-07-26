@@ -352,7 +352,7 @@ cd cmake-build-debug && ctest --output-on-failure
 
 ## Open Design Points
 
-- **Payload types** — currently `EventValue = std::variant<bool, std::int32_t>`.
+- **Payload types** — currently `EventValue = std::variant<bool, std::int32_t, double, std::string>`.
   Extend the variant if events with other value types are needed.
 - **Descriptor capacity** — `EventSupervisor`'s internal `kMaxEvents` is a
   fixed constant (currently 32); adjust to the real event count for the

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <variant>
 
 namespace tickguard {
@@ -20,6 +21,6 @@ namespace tickguard {
  * boundary) — callers must ensure the alternative matches the declared
  * `TValue` for the given `EventId`.
  */
-using EventValue = std::variant<bool, std::int32_t>;
+using EventValue = std::variant<bool, std::int32_t, double, std::string>;
 
 }  // namespace tickguard
