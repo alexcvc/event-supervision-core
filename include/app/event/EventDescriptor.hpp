@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <exception>
 #include <mutex>
 #include <optional>
 #include <variant>
@@ -49,7 +50,11 @@ class EventDescriptor final : public IEventDescriptor {
   /// @param value New raw value, type-erased; must hold a `TValue` alternative.
   void trigger(EventValue value) noexcept override {
     const std::scoped_lock<SpinLock> lock(m_Spin);
-    m_Pending = std::get<TValue>(value);
+    try {
+      m_Pending = std::get<TValue>(value);
+    } catch (const std::bad_variant_access&) {
+      std::terminate();
+    }
     m_Metrics.recordTrigger();
 
     const bool immediate = m_Config.mode == EventMode::Interval && m_Config.delay == std::chrono::milliseconds{0};
@@ -151,7 +156,7 @@ class EventDescriptor final : public IEventDescriptor {
   /// - Debounce: waiting to see if a triggered change persists past delay.
   /// - Heartbeat: periodic unconditional resend of the current image
   ///   (Interval mode only, entered after the first debounce cycle settles).
-  enum class Phase { Debounce, Heartbeat };
+  enum class Phase : std::uint8_t { Debounce, Heartbeat };
 
   /// @brief Sends the pending value if it differs from the current image.
   ///
