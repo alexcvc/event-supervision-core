@@ -14,7 +14,7 @@ C++20 **header-only** library. All logic lives in `include/tickguard/`. Namespac
 | `IEventSender.hpp` | `IEventSender<TValue>` — implement this to route events to any transport. The descriptor never knows the receiver. |
 | `EventConfig.hpp` | `EventMode::{OneShot, Interval}` + `{delay, interval}`. |
 | `EventId.hpp` | `enum class EventId : uint16_t` — append before `Count` to add IDs. |
-| `EventValue.hpp` | `std::variant<bool, int32_t>` — type-erased payload for `Supervisor::trigger()`. |
+| `EventValue.hpp` | `std::variant<bool, int32_t, double, std::string>` — type-erased payload for `Supervisor::trigger()`. |
 | `EventMetrics.hpp` | Atomic `triggered / raised / suppressed` counters per descriptor. |
 | `SpinLock.hpp` | Minimal `std::atomic_flag`-based spinlock guarding each descriptor's internal state (short critical sections only). |
 
