@@ -201,8 +201,8 @@ TEST_CASE("nextDeadline reflects the armed/disarmed state across OneShot and Int
   REQUIRE_FALSE(oneShot.nextDeadline().has_value());
 
   EventDescriptor<bool> interval(EventId::ChannelLifeEthernet0,
-                                 EventConfig{.mode = EventMode::Interval, .delay = 1000ms, .interval = 3000ms},
-                                 sender, /*initial=*/false);
+                                 EventConfig{.mode = EventMode::Interval, .delay = 1000ms, .interval = 3000ms}, sender,
+                                 /*initial=*/false);
 
   interval.trigger(EventValue{true});
   REQUIRE(interval.nextDeadline() == std::optional{1000ms});

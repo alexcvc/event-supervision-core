@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest new functionality or a behavior change for TickGuard
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that TickGuard doesn't support today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: >
+        What would you like to change? Note that new EventMode/timing behavior should fit inside
+        EventDescriptor's existing Debounce/Heartbeat phase machine rather than adding a parallel mechanism.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

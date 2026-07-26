@@ -1,0 +1,52 @@
+name: Bug report
+description: Report unexpected or incorrect behavior in TickGuard
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: Smallest code snippet or steps that trigger the issue. Include EventConfig/EventMode used, if relevant.
+      render: cpp
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: TickGuard commit / tag
+      placeholder: e.g. 7a20843 or v1.2.0
+    validations:
+      required: true
+
+  - type: input
+    id: compiler
+    attributes:
+      label: Compiler and version
+      placeholder: e.g. GCC 14.2.0, Clang 18, MSVC 19.40
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS / platform
+      placeholder: e.g. Ubuntu 24.04, Debian 13, embedded target
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / build output
+      render: shell
+    validations:
+      required: false
